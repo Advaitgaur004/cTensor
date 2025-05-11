@@ -1,0 +1,112 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "main", "ci" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build on Linux
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y build-essential cmake
+    
+    - name: Build project
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+        cmake --build .
+    
+    - name: Run example
+      run: |
+        cd build
+        ./cten_exe || echo "Program ran with errors (expected until math operators are implemented)"
+
+  build-macos:
+    name: Build on macOS
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: brew install cmake
+    
+    - name: Build project
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+        cmake --build .
+    
+    - name: Run example
+      run: |
+        cd build
+        ./cten_exe || echo "Program ran with errors (expected until math operators are implemented)"
+
+  build-windows-mingw:
+    name: Build on Windows (MinGW)
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup MinGW
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: mingw64
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-cmake
+          make
+    
+    - name: Build project
+      shell: pwsh
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -G "MinGW Makefiles" 
+        cmake --build .
+    
+    - name: Run example
+      shell: pwsh
+      run: |
+        cd build
+        ./cten_exe.exe || echo "Program ran with errors (expected until math operators are implemented)"
+
+  build-windows-msvc:
+    name: Build on Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+    
+    - name: Build project
+      shell: pwsh
+      run: |
+        mkdir -p build
+        cd build
+        # Clean the build directory if it exists
+        if (Test-Path -Path "*") {
+          Remove-Item * -Recurse -Force
+        }
+        cmake ..
+        cmake --build .
+    
+    - name: Run example
+      shell: pwsh
+      run: |
+        cd build
+        ./Debug/cten_exe.exe || echo "Program ran with errors (expected until math operators are implemented)"
