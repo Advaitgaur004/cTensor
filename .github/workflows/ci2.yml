@@ -36,7 +36,7 @@ jobs:
         ./cten_exe >> ../results.txt 2>&1 || echo "program had issues but whatever"
     - uses: actions/upload-artifact@v4
       with:
-        name: linux-${{ matrix.c_compiler }}
+        name: linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}
         path: results.txt
 
   build-macos:
@@ -67,7 +67,7 @@ jobs:
         path: results.txt
 
   build-windows:
-    name: windows (msvc)
+    name: Build on Windows (msvc)
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4

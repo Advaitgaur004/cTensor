@@ -37,7 +37,7 @@ def extract_platform_info(content):
     return platform, compiler, framework
 
 def analyze_results():
-    print("=== comparing my lib with pytorch ===")
+    print("=== comparing CTensor results with pytorch ===")
     print(f"time: {datetime.now()}")
     print("")
     
@@ -89,7 +89,7 @@ def analyze_results():
     print("=== results ===")
     print("")
     
-    # find pytorch vs lib
+    # find pytorch vs Ctensor results
     my_results = [r for r in results if r['framework'] != 'PyTorch']
     pytorch_results = [r for r in results if r['framework'] == 'PyTorch']
     
@@ -97,7 +97,7 @@ def analyze_results():
         pytorch_acc = pytorch_results[0]['accuracy']
         print(f"pytorch accuracy: {pytorch_acc}")
     
-    print("my lib results:")
+    print("CTensor Results:")
     for result in my_results:
         acc_diff = ""
         if pytorch_results and result['accuracy'] is not None and pytorch_results[0]['accuracy'] is not None:
