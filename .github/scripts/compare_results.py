@@ -1,139 +1,118 @@
 import os
 import re
-import sys
-from datetime import datetime
 import glob
+from datetime import datetime
 
 def extract_accuracy(content):
-    # Look for accuracy pattern like "accuracy: 0.1234"
+    """Extract accuracy value from result content"""
     accuracy_match = re.search(r'accuracy:\s*([\d.]+)', content)
     if accuracy_match:
         return float(accuracy_match.group(1))
     return None
 
-def extract_loss_values(content):
-    # Look for patterns like "Epoch X average loss: Y.ZZZZZZ"
-    loss_matches = re.findall(r'Epoch\s+\d+\s+average\s+loss:\s*([\d.]+)', content)
-    return [float(loss) for loss in loss_matches]
+def extract_platform_compiler(content):
+    """Extract platform and compiler info"""
+    platform_match = re.search(r'platform:\s*(\w+)', content)
+    compiler_match = re.search(r'compiler:\s*(\w+)', content)
+    
+    platform = platform_match.group(1) if platform_match else "unknown"
+    compiler = compiler_match.group(1) if compiler_match else "unknown"
+    
+    return platform, compiler
 
-def extract_platform_info(content):
-    # Try different patterns for platform
-    platform_match = re.search(r'[Pp]latform:\s*(.+)', content)
-    platform = platform_match.group(1).strip() if platform_match else "Unknown"
-    
-    # Try different patterns for compiler  
-    compiler_match = re.search(r'[Cc]ompiler:\s*(.+)', content)
-    compiler = compiler_match.group(1).strip() if compiler_match else "Unknown"
-    
-    # Try different patterns for framework
-    framework_match = re.search(r'[Ff]ramework:\s*(.+)', content)
-    if framework_match:
-        framework = framework_match.group(1).strip()
-    elif "pytorch results" in content.lower():
-        framework = "PyTorch"
-    else:
-        framework = "cTensor"
-    
-    return platform, compiler, framework
+def is_pytorch_result(content):
+    """Check if this is a PyTorch result file"""
+    return "pytorch results" in content or "framework: pytorch" in content
 
 def analyze_results():
-    print("=== comparing CTensor results with pytorch ===")
-    print(f"time: {datetime.now()}")
-    print("")
+    print("=== CTensor vs PyTorch Comparison ===")
+    print(f"Time: {datetime.now()}")
+    print()
     
     # Find all result files
-    result_files = glob.glob("results.txt") + glob.glob("pytorch_results.txt") + glob.glob("*results*.txt")
-    # Remove duplicates
-    result_files = list(set(result_files))
+    result_files = glob.glob("*.txt")
+    result_files = [f for f in result_files if "results" in f.lower()]
     
     if not result_files:
         print("ERROR: No result files found!")
-        print("Available files:", os.listdir("."))
         return False
     
-    results = []
+    pytorch_accuracy = None
+    ctensor_results = []
     
-    # Process each result file
+    # Process each file
     for file_path in result_files:
-        print(f"Processing: {file_path}")
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            platform, compiler, framework = extract_platform_info(content)
             accuracy = extract_accuracy(content)
-            loss_values = extract_loss_values(content)
-            
-            results.append({
-                'file': file_path,
-                'platform': platform,
-                'compiler': compiler,
-                'framework': framework,
-                'accuracy': accuracy,
-                'loss_values': loss_values,
-                'content': content
-            })
-            
-            print(f"  Platform: {platform}")
-            print(f"  Compiler: {compiler}")
-            print(f"  Framework: {framework}")
-            print(f"  Accuracy: {accuracy}")
-            print(f"  Loss values: {loss_values}")
-            print("")
-            
+            if accuracy is None:
+                continue
+                
+            if is_pytorch_result(content):
+                pytorch_accuracy = accuracy
+                print(f"PyTorch baseline accuracy: {accuracy:.4f}")
+            else:
+                platform, compiler = extract_platform_compiler(content)
+                ctensor_results.append({
+                    'platform': platform,
+                    'compiler': compiler,
+                    'accuracy': accuracy,
+                    'file': file_path
+                })
+                
         except Exception as e:
-            print(f"ERROR processing {file_path}: {e}")
-            print("")
+            print(f"Error processing {file_path}: {e}")
     
-    # simple comparison
-    print("=== results ===")
-    print("")
+    print()
     
-    # find pytorch vs Ctensor results
-    my_results = [r for r in results if r['framework'] != 'PyTorch']
-    pytorch_results = [r for r in results if r['framework'] == 'PyTorch']
+    if pytorch_accuracy is None:
+        print("WARNING: No PyTorch baseline found!")
+        return False
     
-    if pytorch_results:
-        pytorch_acc = pytorch_results[0]['accuracy']
-        print(f"pytorch accuracy: {pytorch_acc}")
+    if not ctensor_results:
+        print("WARNING: No CTensor results found!")
+        return False
     
-    print("CTensor Results:")
-    for result in my_results:
-        acc_diff = ""
-        if pytorch_results and result['accuracy'] is not None and pytorch_results[0]['accuracy'] is not None:
-            diff = abs(result['accuracy'] - pytorch_results[0]['accuracy'])
-            acc_diff = f" (diff: {diff:.3f})"
+    # Compare results
+    print("CTensor Results vs PyTorch:")
+    print("-" * 50)
+    
+    all_consistent = True
+    tolerance = 0.01  # 1% tolerance
+    
+    for result in ctensor_results:
+        diff = abs(result['accuracy'] - pytorch_accuracy)
+        diff_pct = (diff / pytorch_accuracy) * 100
         
-        print(f"  {result['platform']} {result['compiler']}: {result['accuracy']}{acc_diff}")
+        status = "✓ PASS" if diff < tolerance else "✗ FAIL"
+        
+        print(f"{result['platform']:>8} ({result['compiler']:>5}): {result['accuracy']:.4f} "
+              f"(diff: {diff:+.4f}, {diff_pct:+.2f}%) {status}")
+        
+        if diff >= tolerance:
+            all_consistent = False
     
-    # quick check
-    accuracies = [r['accuracy'] for r in results if r['accuracy'] is not None]
+    print("-" * 50)
+    
+    if all_consistent:
+        print("All platforms are consistent with PyTorch!")
+    else:
+        print("Some platforms show significant differences from PyTorch")
+    
+    # Calculate overall statistics
+    accuracies = [r['accuracy'] for r in ctensor_results]
     if len(accuracies) > 1:
         spread = max(accuracies) - min(accuracies)
-        if spread < 0.05:
-            print("looks consistent :)")
-        else:
-            print("hmm results vary a lot :(")
+        avg_acc = sum(accuracies) / len(accuracies)
+        print(f"\nCTensor Statistics:")
+        print(f"  Average accuracy: {avg_acc:.4f}")
+        print(f"  Accuracy spread: {spread:.4f}")
+        print(f"  Platforms tested: {len(ctensor_results)}")
     
-    print("")
-    
-    # save everything to file
-    with open("comparison_report.txt", "w") as f:
-        f.write("comparison results\n")
-        f.write(f"generated: {datetime.now()}\n\n")
-        
-        for result in results:
-            f.write(f"=== {result['file']} ===\n")
-            f.write(f"platform: {result['platform']}\n")
-            f.write(f"compiler: {result['compiler']}\n")
-            f.write(f"accuracy: {result['accuracy']}\n")
-            f.write("\nfull output:\n")
-            f.write(result['content'])
-            f.write("\n" + "-"*30 + "\n\n")
-    
-    print("saved detailed report")
     return True
 
 if __name__ == "__main__":
     success = analyze_results()
-    sys.exit(0 if success else 1)
+    exit(0 if success else 1)
