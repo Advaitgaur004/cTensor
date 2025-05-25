@@ -30,8 +30,18 @@ def analyze_results():
     print()
     
     # Find all result files
-    result_files = glob.glob("*.txt")
-    result_files = [f for f in result_files if "results" in f.lower()]
+    result_files = []
+    
+    patterns = ["results-*.txt", "pytorch_results.txt", "*results*.txt"]
+    for pattern in patterns:
+        result_files.extend(glob.glob(pattern))
+    
+    result_files = list(set(result_files))
+    
+    print(f"Found {len(result_files)} result files:")
+    for f in result_files:
+        print(f"  - {f}")
+    print()
     
     if not result_files:
         print("ERROR: No result files found!")
@@ -55,6 +65,16 @@ def analyze_results():
                 print(f"PyTorch baseline accuracy: {accuracy:.4f}")
             else:
                 platform, compiler = extract_platform_compiler(content)
+                # Extract more detailed info from filename if available
+                if "linux-gcc" in file_path:
+                    platform, compiler = "linux", "gcc"
+                elif "linux-clang" in file_path:
+                    platform, compiler = "linux", "clang"
+                elif "macos" in file_path:
+                    platform, compiler = "macos", "clang"
+                elif "windows" in file_path:
+                    platform, compiler = "windows", "msvc"
+                
                 ctensor_results.append({
                     'platform': platform,
                     'compiler': compiler,

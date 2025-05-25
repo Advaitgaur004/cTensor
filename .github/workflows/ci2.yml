@@ -29,15 +29,15 @@ jobs:
     - name: Run example
       run: |
         cd build
-        echo "=== ${{ matrix.c_compiler }} results ===" > ../results.txt
-        echo "date: $(date)" >> ../results.txt
-        echo "platform: linux" >> ../results.txt
-        echo "compiler: ${{ matrix.c_compiler }}" >> ../results.txt
-        ./cten_exe >> ../results.txt 2>&1 || echo "program had issues but whatever"
+        echo "=== ${{ matrix.c_compiler }} results ===" > ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        echo "date: $(date)" >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        echo "platform: linux" >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        echo "compiler: ${{ matrix.c_compiler }}" >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        ./cten_exe >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt 2>&1 || echo "program had issues but whatever"
     - uses: actions/upload-artifact@v4
       with:
         name: linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}
-        path: results.txt
+        path: results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
 
   build-macos:
     name: Build on macOS
@@ -56,15 +56,15 @@ jobs:
     - name: Run example
       run: |
         cd build
-        echo "=== macos results ===" > ../results.txt
-        echo "date: $(date)" >> ../results.txt
-        echo "platform: macos" >> ../results.txt
-        echo "compiler: clang" >> ../results.txt
-        ./cten_exe >> ../results.txt 2>&1 || echo "program had issues but whatever"
+        echo "=== macos results ===" > ../results-macos.txt
+        echo "date: $(date)" >> ../results-macos.txt
+        echo "platform: macos" >> ../results-macos.txt
+        echo "compiler: clang" >> ../results-macos.txt
+        ./cten_exe >> ../results-macos.txt 2>&1 || echo "program had issues but whatever"
     - uses: actions/upload-artifact@v4
       with:
         name: macos
-        path: results.txt
+        path: results-macos.txt
 
   build-windows:
     name: Build on Windows (msvc)
@@ -84,15 +84,15 @@ jobs:
       shell: pwsh
       run: |
         cd build
-        echo "=== windows results ===" > ../results.txt
-        echo "date: $(Get-Date)" >> ../results.txt
-        echo "platform: windows" >> ../results.txt
-        echo "compiler: msvc" >> ../results.txt
-        ./Debug/cten_exe.exe >> ../results.txt 2>&1 || echo "exe failed but whatever"
+        echo "=== windows results ===" > ../results-windows.txt
+        echo "date: $(Get-Date)" >> ../results-windows.txt
+        echo "platform: windows" >> ../results-windows.txt
+        echo "compiler: msvc" >> ../results-windows.txt
+        ./Debug/cten_exe.exe >> ../results-windows.txt 2>&1 || echo "exe failed but whatever"
     - uses: actions/upload-artifact@v4
       with:
         name: windows
-        path: results.txt
+        path: results-windows.txt
         
   pytorch-comparison:
     runs-on: ubuntu-latest
@@ -115,7 +115,6 @@ jobs:
       run: |
         python .github/scripts/compare_results.py
         echo "=== comparison done ==="
-        cat comparison_report.txt || echo "no analysis file found"
     - uses: actions/upload-artifact@v4
       with:
         name: all-comparisons
