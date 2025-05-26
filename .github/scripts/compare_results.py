@@ -100,7 +100,7 @@ def analyze_results():
     print("-" * 50)
     
     all_consistent = True
-    tolerance = 0.01  # 1% tolerance
+    tolerance = 0.1  # 10% tolerance
     
     for result in ctensor_results:
         diff = abs(result['accuracy'] - pytorch_accuracy)

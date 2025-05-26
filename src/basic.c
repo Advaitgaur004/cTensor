@@ -98,10 +98,10 @@ Tensor Tensor_new(TensorShape shape, bool requires_grad) {
     self.data = _cten_malloc(sizeof(FloatBuffer) + sizeof(float) * numel);
     self.data->numel = numel;
     
-    //Initialize tensor with random values
+    //Initialize tensor with contant value 0.5 for comparison with other platforms
     float* data_ptr = self.data->flex;
     for (int i = 0; i < numel; i++) {
-        data_ptr[i] = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
+        data_ptr[i] = 0.5f;
     }
     
     if(requires_grad) {
