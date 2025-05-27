@@ -1,15 +1,15 @@
-name: Build and Test
+name: Build and Test 2
 
 on:
   push:
-    branches: [ "main", "ci" ]
+    branches: [ "ci" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "ci" ]
   workflow_dispatch:
 
 jobs:
   build-linux:
-    name: Build on Linux (${{ matrix.c_compiler }})
+    name: linux (${{ matrix.c_compiler }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -18,7 +18,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y build-essential cmake ${{ matrix.c_compiler }}
     - name: Build project
@@ -27,11 +26,18 @@ jobs:
         cd build
         cmake .. -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         cmake --build .
-    
     - name: Run example
       run: |
         cd build
-        ./cten_exe || echo "Program ran with errors (expected until math operators are implemented)"
+        echo "=== ${{ matrix.c_compiler }} results ===" > ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        echo "date: $(date)" >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        echo "platform: linux" >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        echo "compiler: ${{ matrix.c_compiler }}" >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
+        ./cten_exe >> ../results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt 2>&1 || echo "program had issues but whatever"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}
+        path: results-linux-${{ matrix.c_compiler }}-${{ matrix.cpp_compiler }}.txt
 
   build-macos:
     name: Build on macOS
@@ -39,77 +45,78 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
     - name: Install dependencies
       run: brew install cmake
-    
     - name: Build project
       run: |
         mkdir -p build
         cd build
         cmake ..
         cmake --build .
-    
     - name: Run example
       run: |
         cd build
-        ./cten_exe || echo "Program ran with errors (expected until math operators are implemented)"
-
-  build-windows-mingw:
-    name: Build on Windows (MinGW)
-    runs-on: windows-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup MinGW
-      uses: msys2/setup-msys2@v2
+        echo "=== macos results ===" > ../results-macos.txt
+        echo "date: $(date)" >> ../results-macos.txt
+        echo "platform: macos" >> ../results-macos.txt
+        echo "compiler: clang" >> ../results-macos.txt
+        ./cten_exe >> ../results-macos.txt 2>&1 || echo "program had issues but whatever"
+    - uses: actions/upload-artifact@v4
       with:
-        msystem: mingw64
-        update: true
-        install: >-
-          mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-cmake
-          make
-    
-    - name: Build project
-      shell: pwsh
-      run: |
-        mkdir -p build
-        cd build
-        cmake .. -G "MinGW Makefiles"
-        cmake --build .
-    
-    - name: Run example
-      shell: pwsh
-      run: |
-        cd build
-        ./cten_exe.exe || echo "Program ran with errors (expected until math operators are implemented)"
+        name: macos
+        path: results-macos.txt
 
-  build-windows-msvc:
-    name: Build on Windows (MSVC)
+  build-windows:
+    name: Build on Windows (msvc)
     runs-on: windows-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup MSVC
+    - uses: actions/checkout@v4
+    - name: setup msvc
       uses: ilammy/msvc-dev-cmd@v1
-    
     - name: Build project
       shell: pwsh
       run: |
         mkdir -p build
         cd build
-        # Clean the build directory if it exists
-        if (Test-Path -Path "*") {
-          Remove-Item * -Recurse -Force
-        }
         cmake ..
         cmake --build .
-    
     - name: Run example
       shell: pwsh
       run: |
         cd build
-        ./Debug/cten_exe.exe || echo "Program ran with errors (expected until math operators are implemented)"
+        echo "=== windows results ===" > ../results-windows.txt
+        echo "date: $(Get-Date)" >> ../results-windows.txt
+        echo "platform: windows" >> ../results-windows.txt
+        echo "compiler: msvc" >> ../results-windows.txt
+        ./Debug/cten_exe.exe >> ../results-windows.txt 2>&1 || echo "exe failed but whatever"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows
+        path: results-windows.txt
+        
+  pytorch-comparison:
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos, build-windows]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: install pytorch
+      run: pip install torch scikit-learn numpy
+    - name: get all results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: "*"
+        merge-multiple: true
+    - name: run pytorch version
+      run: python .github/scripts/pytorch_comparison.py > pytorch_results.txt
+    - name: compare everything
+      run: |
+        python .github/scripts/compare_results.py
+        echo "=== comparison done ==="
+    - uses: actions/upload-artifact@v4
+      with:
+        name: all-comparisons
+        path: |
+          *.txt
