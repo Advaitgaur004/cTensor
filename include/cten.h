@@ -7,10 +7,6 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define _CTEN_PICK(_1,_2,NAME,...) NAME
-#define Tensor_mean(...) _CTEN_PICK(__VA_ARGS__, Tensor_mean_dim, Tensor_mean_all)(__VA_ARGS__)
-#define Tensor_sum(...)  _CTEN_PICK(__VA_ARGS__, Tensor_sum_dim,  Tensor_sum_all )(__VA_ARGS__)
-
 typedef int TensorShape[4];
 typedef struct GradNode GradNode;
 
@@ -72,12 +68,8 @@ Tensor Tensor_matmul(Tensor self, Tensor other);
 
 Tensor Tensor_neg(Tensor self);
 Tensor Tensor_abs(Tensor self);
-
-/* Helper functions that the macros dispatch to */
-Tensor Tensor_mean_all(Tensor self);
-Tensor Tensor_mean_dim(Tensor self, int dim);
-Tensor Tensor_sum_all (Tensor self);
-Tensor Tensor_sum_dim (Tensor self, int dim);
+Tensor Tensor_sum(Tensor self, ...);
+Tensor Tensor_mean(Tensor self, ...);
 
 Tensor Tensor_max(Tensor self);
 Tensor Tensor_min(Tensor self);
@@ -121,7 +113,6 @@ void optim_sgd_delete(optim_sgd* self);
 void cten_begin_eval();
 bool cten_is_eval();
 void cten_end_eval();
-bool va_arg_is_present(va_list args);
 
 /* Utils */
 void Tensor_normalize_dataset(const float (*X)[4], float (*X_norm)[4], int n_samples, int n_train_samples, int n_features);Tensor Tensor_detach(Tensor self);
@@ -129,7 +120,11 @@ void Tensor_shuffle_dataset(const float (*X)[4], const int *y,float (*X_shuffled
 void cten_assert(bool cond, const char* fmt, ...);
 void cten_assert_shape(const char* title, TensorShape a, TensorShape b);
 void cten_assert_dim(const char* title, int a, int b);
-
 bool cten_elemwise_broadcast(Tensor* a, Tensor* b);
 int load_iris_dataset(const float (**X)[4], const int** y);
 Tensor Tensor_reduce_dim(Tensor self, int dim, const char* operation);
+
+Tensor _Tensor_sum_axes(Tensor self, const int* axes, int n_axes);
+Tensor _Tensor_mean_axes(Tensor self, const int* axes, int n_axes);
+Tensor Tensor_reduce_multi_dim(Tensor self, const int* dims, int n_dims, const char* operation);
+void sorting_axes(int* axes, int n_axes, int ndim);

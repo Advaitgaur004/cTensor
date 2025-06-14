@@ -9,63 +9,6 @@
 #include <time.h>    
 #include <limits.h>
 
-bool va_arg_is_present(va_list args) {
-    (void)args;
-    return false;
-}
-
-Tensor GradFn_mean(Tensor self, int i);
-Tensor GradFn_sum(Tensor self, int i);
-
-Tensor Tensor_mean_all(Tensor self) {
-    float total = 0.0f;
-    for(int i = 0; i < self.data->numel; i++) total += self.data->flex[i];
-    Tensor res = Tensor_new((TensorShape){1,0,0,0}, self.node != NULL);
-    res.data->flex[0] = total / self.data->numel;
-    if(res.node != NULL) {
-        res.node->grad_fn = GradFn_mean;
-        res.node->inputs[0] = self;
-        res.node->n_inputs = 1;
-        res.node->name = "Mean";
-    }
-    return res;
-}
-
-Tensor Tensor_mean_dim(Tensor self, int dim) {
-    Tensor res = Tensor_reduce_dim(self, dim, "mean");
-    if(res.node != NULL) {
-        res.node->grad_fn = GradFn_mean;
-        res.node->inputs[0] = self;
-        res.node->n_inputs = 1;
-        res.node->name = "Mean";
-    }
-    return res;
-}
-
-Tensor Tensor_sum_all(Tensor self) {
-    float total = 0.0f;
-    for(int i = 0; i < self.data->numel; i++) total += self.data->flex[i];
-    Tensor res = Tensor_new((TensorShape){1,0,0,0}, self.node != NULL);
-    res.data->flex[0] = total;
-    if(res.node != NULL) {
-        res.node->grad_fn = GradFn_sum;
-        res.node->inputs[0] = self;
-        res.node->n_inputs = 1;
-        res.node->name = "Sum";
-    }
-    return res;
-}
-
-Tensor Tensor_sum_dim(Tensor self, int dim) {
-    Tensor res = Tensor_reduce_dim(self, dim, "sum");
-    if(res.node != NULL) {
-        res.node->grad_fn = GradFn_sum;
-        res.node->inputs[0] = self;
-        res.node->n_inputs = 1;
-        res.node->name = "Sum";
-    }
-    return res;
-}
 
 void cten_assert(bool cond, const char* fmt, ...) {
     if(!cond) {
@@ -217,20 +160,57 @@ void Tensor_shuffle_dataset(const float (*X)[4], const int *y,float (*X_shuffled
     free(indices);
 }
 
-Tensor Tensor_reduce_dim(Tensor self, int dim, const char* operation) {
+extern Tensor GradFn_sum(Tensor self, int i);
+extern Tensor GradFn_mean(Tensor self, int i);
+
+Tensor _Tensor_sum_axes(Tensor self, const int* axes, int n_axes) {
     int ndim = TensorShape_dim(self.shape);
-    if (dim < 0){
-        if (dim < -ndim) {
-            printf("dim %d out of range", dim);
-            exit(-1);
-        }
-        dim += ndim;
-    }
-    if (dim >= ndim) {
-        printf("dim %d out of range", dim);
-        exit(-1);
+    // If n_axes is 0, reduce all dimensions
+    if (n_axes == 0) {
+        int all_axes[4];
+        for (int i = 0; i < ndim; ++i) all_axes[i] = i;
+        n_axes = ndim;
+        axes = all_axes;
     }
     
+    sorting_axes(axes, n_axes, ndim);
+    bool requires_grad = !cten_is_eval() && (self.node != NULL);
+    Tensor res = Tensor_reduce_multi_dim(self, axes, n_axes, "sum");
+    if (requires_grad) {
+        res.node->grad_fn = GradFn_sum;
+        res.node->inputs[0] = self;
+        res.node->n_inputs = 1;
+        res.node->name = "Sum";
+    }
+    return res;
+}
+
+Tensor _Tensor_mean_axes(Tensor self, const int* axes, int n_axes) {
+    int ndim = TensorShape_dim(self.shape);
+    
+    // If n_axes is 0, reduce all dimensions
+    if (n_axes == 0) {
+        int all_axes[4];
+        for (int i = 0; i < ndim; ++i) all_axes[i] = i;
+        n_axes = ndim;
+        axes = all_axes;
+    }
+    sorting_axes(axes, n_axes, ndim);
+    
+    bool requires_grad = !cten_is_eval() && (self.node != NULL);
+    Tensor res = Tensor_reduce_multi_dim(self, axes, n_axes, "mean");
+    if (requires_grad) {
+        res.node->grad_fn = GradFn_mean;
+        res.node->inputs[0] = self;
+        res.node->n_inputs = 1;
+        res.node->name = "Mean";
+    }
+    
+    return res;
+}
+
+Tensor Tensor_reduce_dim(Tensor self, int dim, const char* operation) {
+    int ndim = TensorShape_dim(self.shape);
     TensorShape out_shape = {0, 0, 0, 0};
     int out_idx = 0;
     for (int i = 0; i < ndim; i++) {
@@ -278,5 +258,43 @@ Tensor Tensor_reduce_dim(Tensor self, int dim, const char* operation) {
         }
     }
     
+    return res;
+}
+
+void sorting_axes(int* axes, int n_axes, int ndim) {
+    // Normalize negative axes
+    for (int i = 0; i < n_axes; ++i) {
+        if (axes[i] < 0) axes[i] += ndim;
+        if (axes[i] < 0 || axes[i] >= ndim) {
+            fprintf(stderr, "Axis %d out of bounds for ndim=%d\n", axes[i], ndim);
+            abort();
+        }
+    }
+    // Sort axes in descending order
+    for (int i = 0; i < n_axes - 1; ++i) {
+        for (int j = i + 1; j < n_axes; ++j) {
+            if (axes[j] > axes[i]) {
+                int tmp = axes[i];
+                axes[i] = axes[j];
+                axes[j] = tmp;
+            }
+        }
+    }
+    
+    // Check for duplicates
+    for (int i = 1; i < n_axes; ++i) {
+        if (axes[i] == axes[i-1]) {
+            fprintf(stderr, "Duplicate axis found\n");
+            abort();
+        }
+    }  
+}
+
+Tensor Tensor_reduce_multi_dim(Tensor self, const int* dims, int n_dims, const char* operation) {
+    Tensor res = self;
+    for (int i = 0; i < n_dims; i++){
+        Tensor temp = Tensor_reduce_dim(res, dims[i], operation);
+        res = temp;
+    }
     return res;
 }

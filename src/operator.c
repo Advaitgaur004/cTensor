@@ -7,13 +7,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef Tensor_mean
-#undef Tensor_mean
-#endif
-#ifdef Tensor_sum
-#undef Tensor_sum
-#endif
+#include <stdio.h>
 
 static Tensor GradFn_add(Tensor self, int i) {
     // f(x, y) = x + y; f'(x) = 1; f'(y) = 1
@@ -100,86 +94,48 @@ Tensor GradFn_mean(Tensor self, int i) {
     return res;
 }
 
-Tensor Tensor_mean(Tensor self, ...) {
-    int ndim = TensorShape_dim(self.shape);
-    int dim = INT_MIN; // Default value to trigger the "else" block
-    
-    va_list args;
-    va_start(args, self);
-    
-    if (va_arg_is_present(args)) {
-        dim = va_arg(args, int);
-    }
-    va_end(args);
-    
-
-    if (dim != INT_MIN) {
-        Tensor res = Tensor_reduce_dim(self, dim, "mean");
-        if(res.node != NULL) {
-            res.node->grad_fn = GradFn_mean;
-            res.node->inputs[0] = self;
-            res.node->n_inputs = 1;
-            res.node->name = "Mean";
-        }
-        return res;
-    } else {
-        Tensor res = Tensor_new((TensorShape){1, 0, 0, 0}, self.node != NULL);
-        float sum = 0;
-        for(int i = 0; i < self.data->numel; i++) {
-            sum += self.data->flex[i];
-        }
-        res.data->flex[0] = sum / self.data->numel;
-        if(res.node != NULL) {
-            res.node->grad_fn = GradFn_mean;
-            res.node->inputs[0] = self;
-            res.node->n_inputs = 1;
-            res.node->name = "Mean";
-        }
-        return res;
-    }
-}
 Tensor GradFn_sum(Tensor self, int i) {
     // f(x) = sum(x); f'(x) = 1
     return Tensor_ones(self.node->inputs[i].shape, false);
 }
 
+
 Tensor Tensor_sum(Tensor self, ...) {
-    int ndim = TensorShape_dim(self.shape);
-    int dim = INT_MIN; // Default value to trigger the "else" block
-    
     va_list args;
     va_start(args, self);
-    
-    if (va_arg_is_present(args)) {
-        dim = va_arg(args, int);
+    int axes[4] = {0, 0, 0, 0}; // zeros to prevent garbage values
+    int n_axes = 0;
+
+    for (int i = 0; i < 4; ++i) {
+        int axis = va_arg(args, int);
+        if (axis >= -4 && axis < 4) { //hope is garbage value should not be in this range
+            axes[n_axes++] = axis;  
+        } 
+        else {
+            break;
+        }
     }
     va_end(args);
-    
+    return _Tensor_sum_axes(self, axes, n_axes);
+}
 
-    if (dim != INT_MIN) {
-        Tensor res = Tensor_reduce_dim(self, dim, "sum");
-        if(res.node != NULL) {
-            res.node->grad_fn = GradFn_sum;
-            res.node->inputs[0] = self;
-            res.node->n_inputs = 1;
-            res.node->name = "Sum";
+Tensor Tensor_mean(Tensor self, ...) {
+    va_list args;
+    va_start(args, self);
+    int axes[4];
+    int n_axes = 0;
+    
+    for (int i = 0; i < 4; ++i) {
+        int axis = va_arg(args, int);
+        if (axis >= -4 && axis < 4) { //hope is garbage value should not be in this range
+            axes[n_axes++] = axis;  
+        } 
+        else {
+            break;
         }
-        return res;
-    } else {
-        Tensor res = Tensor_new((TensorShape){1, 0, 0, 0}, self.node != NULL);
-        float sum = 0;
-        for(int i = 0; i < self.data->numel; i++) {
-            sum += self.data->flex[i];
-        }
-        res.data->flex[0] = sum;
-        if(res.node != NULL) {
-            res.node->grad_fn = GradFn_sum;
-            res.node->inputs[0] = self;
-            res.node->n_inputs = 1;
-            res.node->name = "Sum";
-        }
-        return res;
     }
+    va_end(args);
+    return _Tensor_mean_axes(self, axes, n_axes);
 }
 
 static Tensor GradFn_matmul(Tensor self, int i) {
